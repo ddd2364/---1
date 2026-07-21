@@ -174,15 +174,10 @@ GET  /api/sessions/{id}/traces         执行 Trace
 
 API 与 Runtime 分离：网页不直接操作 Session 文件或工具，所有状态都经过后端统一处理。服务默认只监听本机地址；当前版本面向笔试演示，不包含登录鉴权，不应直接暴露到公网。
 
-## 建议录屏流程
 
-1. 展示 `.env.example`、工具 Schema 和 Runtime 主循环。
-2. 启动网页，在主界面询问计算问题，右侧 Trace 同步展示工具决策。
-3. Session 1：查询北京天气并新增“带伞”待办，展示右侧 Memory。
-4. 点击“新建 Session”创建 Session 2，让 Agent 协助写周报并新增另一个待办。
-5. 从左侧分别切回两个 Session，追问上下文并检查待办，证明隔离与恢复。
-6. 运行测试，展示通过结果。
 
-录屏文件不直接提交到 Git：视频体积较大，已通过 `.gitignore` 排除。请上传到网盘、云盘或招聘方指定平台，并在最终提交说明中附可访问链接。
+
+
+
 
 Prompt 见 [docs/prompts.md](docs/prompts.md)，AI 辅助开发和问题解决记录见 [docs/development-log.md](docs/development-log.md)，完整录屏步骤见 [docs/recording-test-cases.md](docs/recording-test-cases.md)。
