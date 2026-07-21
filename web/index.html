@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="从零实现的最小 Agent Runtime 网页演示" />
+    <title>Loop — Minimal Agent Runtime</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="panel-resizer left-resizer" id="left-resizer" role="separator" aria-label="调整 Session 栏宽度" aria-orientation="vertical" tabindex="0"></div>
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div><strong>LOOP</strong><small>Agent Runtime</small></div>
+        </div>
+
+        <button class="new-session" id="new-session" type="button">
+          <span aria-hidden="true">＋</span> 新建 Session
+        </button>
+
+        <div class="section-label"><span>会话</span><span id="session-count">0</span></div>
+        <nav class="session-list" id="session-list" aria-label="Session 列表"></nav>
+
+        <div class="sidebar-bottom">
+          <div class="runtime-card">
+            <div class="runtime-card-head"><span class="status-dot"></span><span>Runtime Online</span></div>
+            <div class="runtime-model" id="runtime-model">DeepSeek</div>
+            <div class="runtime-meta"><span id="tool-count">4 tools</span><span id="max-steps">8 steps</span></div>
+          </div>
+          <div class="shortcut"><kbd>Ctrl</kbd><kbd>Enter</kbd><span>发送消息</span></div>
+        </div>
+      </aside>
+
+      <main class="chat-panel">
+        <header class="topbar">
+          <button class="icon-button mobile-only" id="menu-button" aria-label="打开 Session 列表">☰</button>
+          <div class="session-heading">
+            <span class="eyebrow">CURRENT SESSION</span>
+            <h1 id="session-title">新对话</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="session-id" id="session-id">—</span>
+            <button class="icon-button" id="copy-session" aria-label="复制 Session ID" title="复制 Session ID">⧉</button>
+            <button class="trace-toggle" id="trace-toggle" type="button"><span class="pulse"></span> Trace</button>
+          </div>
+        </header>
+
+        <section class="messages" id="messages" aria-live="polite">
+          <div class="welcome" id="welcome">
+            <span class="welcome-kicker">MINIMAL AGENT · REAL LOOP</span>
+            <h2>今天想让 Agent<br /><em>完成什么？</em></h2>
+            <p>它会自主判断直接回答或调用工具。每一步决策都可以在 Trace 中查看。</p>
+            <div class="prompt-grid">
+              <button class="prompt-card" data-prompt="帮我计算 (125 + 75) * 3">
+                <span class="prompt-icon">∑</span><strong>安全计算</strong><small>计算 (125 + 75) × 3</small>
+              </button>
+              <button class="prompt-card" data-prompt="查询北京天气，并添加一个带伞的待办">
+                <span class="prompt-icon">☂</span><strong>连续工具</strong><small>查天气并记录待办</small>
+              </button>
+              <button class="prompt-card" data-prompt="搜索 Context 压缩相关资料，然后总结要点">
+                <span class="prompt-icon">⌕</span><strong>知识搜索</strong><small>搜索并整理资料</small>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <footer class="composer-wrap">
+          <form class="composer" id="composer">
+            <textarea id="message-input" rows="1" maxlength="12000" placeholder="给 Agent 发送消息…" aria-label="消息内容"></textarea>
+            <div class="composer-footer">
+              <div class="tool-chips" id="tool-chips"></div>
+              <button class="send-button" id="send-button" type="submit" aria-label="发送消息"><span>发送</span><b>↑</b></button>
+            </div>
+          </form>
+          <p class="disclaimer">工具结果可能来自 Mock 数据 · 关键结论请核验</p>
+        </footer>
+      </main>
+
+      <aside class="inspector" id="inspector">
+        <div class="panel-resizer right-resizer" id="right-resizer" role="separator" aria-label="调整 Trace 栏宽度" aria-orientation="vertical" tabindex="0"></div>
+        <div class="inspector-head">
+          <div><span class="eyebrow">OBSERVABILITY</span><h2>Execution Trace</h2></div>
+          <button class="icon-button mobile-close" id="close-trace" aria-label="关闭 Trace">×</button>
+        </div>
+
+        <div class="run-summary">
+          <div><span>本轮状态</span><strong id="run-status"><i class="status-dot"></i> Ready</strong></div>
+          <div><span>执行步数</span><strong id="step-count">0 / 8</strong></div>
+        </div>
+
+        <section class="inspector-section trace-section">
+          <div class="section-title"><h3>事件流</h3><button id="refresh-trace" type="button">刷新</button></div>
+          <div class="timeline" id="timeline">
+            <div class="empty-trace"><span>⌁</span><p>发送消息后，这里会显示<br />模型决策和工具执行过程。</p></div>
+          </div>
+        </section>
+
+        <section class="inspector-section memory-section">
+          <div class="section-title"><h3>Session Memory</h3><span id="todo-badge">0 TODO</span></div>
+          <div class="memory-summary" id="memory-summary">尚未生成历史摘要</div>
+          <div class="todo-list" id="todo-list"></div>
+        </section>
+      </aside>
+    </div>
+    <div class="backdrop" id="backdrop"></div>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
