@@ -113,7 +113,8 @@ function renderSession() {
   el["session-title"].textContent = session.title;
   el["session-id"].textContent = session.id;
   el["session-id"].title = session.id;
-  const visible = session.messages.filter((message) => message.role !== "tool");
+  const visible = session.messages.filter((message) =>
+    message.role !== "tool" && !(message.role === "assistant" && message.name));
   if (!visible.length) {
     el.messages.innerHTML = welcomeMarkup();
     bindPromptCards();
@@ -285,7 +286,7 @@ function traceEventElement(trace) {
 
 function traceLabel(trace) {
   const labels = {
-    run_started: "Run started", decision: "Model decision", tool_finished: "Tool completed",
+    run_started: "Run started", decision: "Model decision", tool_started: "Tool started", tool_finished: "Tool completed",
     run_finished: "Final answer", parse_repair: "Format repair", context_compacted: "Context compacted",
     run_failed: "Run failed", max_steps_reached: "Max steps reached",
   };
@@ -294,7 +295,12 @@ function traceLabel(trace) {
 
 function traceDetails(trace) {
   if (trace.event === "decision") return trace.tool ? `${trace.type} → ${trace.tool} · ${trace.reasoning_summary || "—"}` : `${trace.type} · ${trace.reasoning_summary || "—"}`;
-  if (trace.event === "tool_finished") return `${trace.tool} · ${trace.ok ? "success" : trace.error || "failed"}`;
+  if (trace.event === "tool_started") return `${trace.tool} · ${JSON.stringify(trace.arguments || {})}`;
+  if (trace.event === "tool_finished") {
+    const result = trace.result ? ` · ${JSON.stringify(trace.result).slice(0, 600)}` : "";
+    const duration = trace.duration_ms == null ? "" : ` · ${trace.duration_ms} ms`;
+    return `${trace.tool} · ${trace.ok ? "success" : trace.error || "failed"}${duration}${result}`;
+  }
   if (trace.event === "run_started") return `收到 ${trace.input_chars || 0} 字符输入`;
   if (trace.event === "run_finished") return `在第 ${trace.step} 步生成最终回答`;
   if (trace.error) return trace.error;

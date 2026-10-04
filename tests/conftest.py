@@ -27,6 +27,19 @@ TEST_DESCRIPTIONS = {
     "test_session_and_message_api": "网页 Session、消息和 Trace API 正常工作",
     "test_web_api_validates_input": "网页 API 拒绝非法消息输入",
     "test_real_api_returns_content": "真实 DeepSeek API 能够返回内容",
+    "test_real_api_agent_tool_loop": "真实模型选择计算器、执行并生成最终答案",
+    "test_tool_call_arguments_and_trace_are_preserved": "调用参数与结果成对回填，Trace 记录耗时与决策摘要",
+    "test_two_windows_resume_with_independent_todos": "双窗口天气和周报任务隔离，重启后继续带工具追问",
+    "test_errors_return_to_model_or_user_without_unbounded_retry": "工具错误交回模型，格式修复和接口异常有界终止",
+    "test_compaction_runs_between_tool_steps": "同一次请求的连续工具输出也触发 Context 压缩",
+    "test_same_session_serializes_but_other_session_can_run": "同一 Session 串行保护，不阻塞其他 Session",
+    "test_compaction_keeps_tool_call_and_result_together": "压缩边界保留完整工具调用与结果",
+    "test_memory_recall_uses_current_session_state_after_compaction": "压缩后召回当前待办状态，不跨 Session 注入",
+    "test_calculator_rejects_invalid_or_unbounded_results": "计算器拒绝非法、非实数及过大中间值",
+    "test_schema_validation_prevents_invalid_todo_mutation": "Schema 拦截非法参数，防止错误修改待办",
+    "test_transient_http_error_retries_same_request": "429 重试相同请求并尊重数字 Retry-After",
+    "test_http_error_retry_is_bounded": "鉴权错误不重试，瞬态错误限次重试",
+    "test_network_retry_exhaustion_is_reported": "网络重试耗尽后返回统一 LLMError",
 }
 
 

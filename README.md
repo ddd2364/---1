@@ -3,6 +3,24 @@
 
 一个不依赖 LangGraph、OpenHands 等 Agent 框架的最小可用 Agent。项目默认使用 DeepSeek，手写了模型调用、决策解析、工具注册、执行循环、Session、Context 压缩和 Trace，并提供完整网页工作台。
 
+实现按 `learn-claude-code` 的教学风格组织：直观循环、普通工具函数、Schema 清单与分发映射。保留必要的 Session、HTTP、存储边界，便于逐个文件阅读和测试。
+
+## 题目要求与实现
+
+| Vibe Coding 要求 | 实现入口 | 验证 |
+|---|---|---|
+| 自行实现基本 Loop，直接回答或工具调用 | `AgentRuntime.agent_loop()` | 直接回答、连续工具、最大步数测试 |
+| calculator、search 及自定义工具 | `tools.py` 的 `run_calculator/search/weather/todo` | AST 安全计算、mock 标记、待办状态 |
+| 名称、描述、参数 Schema、注册机制 | `TOOLS` + `TOOL_HANDLERS` + `register(schema, handler)` | Schema 校验、未知工具和异常测试 |
+| LLM 自主决策及输出解析 | `parse_decision()` 解析 JSON 中的决策摘要、调用或答案 | 非法输出修复；真实 API 工具闭环 |
+| 双窗口独立 Session、持久化和追问 | 独立 UUID、JSON 文件与每会话线程锁 | 天气/周报双窗口，恢复后完成原待办 |
+| Context、基础压缩和 Memory | 每步调用前检查；摘要 + 最近消息 + 当前待办 | 连续工具期间压缩、调用结果配对测试 |
+| 基本异常和 Trace | 限次格式修复、HTTP 退避；JSONL 事件 | 参数、结果、耗时、失败原因可查看 |
+
+建议阅读顺序：`tools.py → parser.py → runtime.py → context.py → session.py → llm.py`。
+
+参考代码对应：s01 的循环、s02 的工具分发、s03 的执行前校验、s08 的压缩边界、s09 的 Memory 召回、s10 的提示组装、s11 的限次重试。题目未要求 Skills、Subagent 或 Worktree，因此没有扩展这些机制。
+
 ## 快速开始
 
 要求 Python 3.10+（推荐 3.12）。运行时没有第三方依赖；测试使用 pytest。
@@ -56,7 +74,7 @@ python web.py --host 127.0.0.1 --port 8080
 │  ├─ runtime.py                  # Agent 主循环、最大 step、工具执行和异常边界
 │  ├─ llm.py                      # DeepSeek OpenAI-compatible HTTP 客户端和 .env 加载
 │  ├─ parser.py                   # 解析 tool_call / final JSON，处理非法模型输出
-│  ├─ tools.py                    # 工具接口、注册中心、Schema 校验及四个工具实现
+│  ├─ tools.py                    # TOOLS、TOOL_HANDLERS、Schema 校验与四个 run_* 函数
 │  ├─ session.py                  # Session 创建、加载、原子保存、恢复与隔离
 │  ├─ context.py                  # Context 组装、工具结果回填、摘要压缩和降级机制
 │  ├─ trace.py                    # 按 Session 写入 JSONL 执行事件日志
@@ -102,18 +120,35 @@ Web UI
 
 每个用户请求最多执行 8 个 step。模型可以直接返回 final，也可以调用工具；工具结果作为明确标记的 `tool_result` 回填，下一个 step 由模型决定继续调用工具还是回答。非法模型输出只纠正一次，防止隐藏的无限重试。
 
+`run()` 负责锁定 Session、加载和保存用户输入；`agent_loop()` 明确执行以下步骤：
+
+```text
+检查并压缩旧 Context → 组装 Prompt/Schema/Memory → 请求 LLM → 解析决策
+    ├─ final：保存答案并返回
+    └─ tool_call：保存调用参数 → Schema 校验 → handler(**arguments)
+                  → 保存工具结果与 Trace → 下一步
+```
+
+每次工具执行的参数和结果成对保存；`reasoning_summary` 仅记录在 Trace。HTTP 网络/超时、429 和指定服务端错误最多重试 2 次，带指数退避和抖动；鉴权等其他 HTTP 错误直接返回。格式修复、压缩及网络重试属于辅助调用，不计入 8 个决策 step，均有自己的终止边界。
+
 这里刻意使用模型输出 JSON 协议，而不是 SDK 的 Agent 或自动工具循环：Runtime 自己向模型提供工具 Schema、解析决策并执行工具，核心控制权完全在项目内。HTTP 层只负责一次 Chat Completions 请求。
 
 ## Session、Context 与 Memory
 
 每个窗口对应独立 UUID，消息、摘要和 todo 保存到 `data/sessions/<id>.json`。不同 Session 不共享状态；切换或重启后可从文件恢复。Trace 存在 `data/traces/<id>.jsonl`，不会进入模型 Context。
 
+同一服务进程中，同一 Session 的整轮请求串行执行，锁覆盖加载、工具执行和保存；不同 Session 可以并行。锁归属于共享的 `SessionStore`，不提供跨进程文件锁。
+
 Memory 分为两类：
 
 1. 对话 Memory：每次调用模型前召回当前 Session 的摘要和最近消息，支持普通追问及带工具追问。
-2. 结构化 Memory：todo 等确定性状态不依赖自然语言召回，工具执行时直接从当前 Session 读取和写入。
+2. 结构化 Memory：每次请求 LLM 前，将当前 Session 最近 20 条 todo（每条文本最多 120 字符）及总数注入 `<session_memory>`；完整数据保存在 Session，查询或修改时通过 todo 工具读取和写入。压缩不会删除待办。
 
-Context 超过字符阈值时，较早消息会被模型压缩成摘要，保留用户目标、事实、偏好、承诺、未完成事项和工具结论；最近 8 条消息保留原文。压缩 API 失败时使用基础截断摘要降级。完整思维链不进入 Context；只在 Trace 中保留模型自行返回的一句话决策摘要。
+每个决策 step 之前检查 Context，超过字符阈值时将较早消息压缩成摘要，保留用户目标、事实、偏好、承诺、未完成事项和工具结论；最近 8 条消息保留原文。切口落在工具结果上时多保留对应的调用，避免拆开。压缩 API 失败时使用本地截断摘要降级。完整思维链不进入 Context；Trace 只保留模型自行返回的一句话决策摘要。
+
+系统协议和工具 Schema 放在 system 消息；历史摘要、当前待办作为明确标记的 user 数据消息放在最近历史之前，不把记忆内容提升为系统指令。每次只召回指定 Session，未实现跨会话用户画像或向量检索。
+
+这里的字符阈值是**压缩触发阈值**，不是整个 API 请求的硬上限；系统提示、Schema 和额外注入的 Memory 不计入该估算。近期消息或单条用户输入本身过大时仍可能超过模型窗口，API 错误会明确返回，当前版本不丢弃本轮问题来强行满足预算。
 
 可通过环境变量调节：
 
@@ -129,6 +164,19 @@ AGENT_CONTEXT_CHARS=24000
 - `todo` 支持 `add`、`list`、`complete`，始终操作当前 Session。
 - 注册中心统一校验 required、基础类型、enum 和额外参数，并把工具异常转换为结果交回 Agent。
 - 工具输出限制长度，避免一次调用挤爆 Context。
+
+新增工具只需编写普通函数并注册，无需继承工具基类：
+
+```python
+def run_echo(text: str, *, context: ToolContext) -> ToolResult:
+    return ToolResult(ok=True, data=text)
+
+registry.register({
+    "name": "echo", "description": "返回输入文本",
+    "parameters": {"type": "object", "properties": {"text": {"type": "string"}},
+                   "required": ["text"], "additionalProperties": False},
+}, run_echo)
+```
 
 ## 测试
 
@@ -159,7 +207,9 @@ $env:RUN_REAL_LLM_TEST="1"
 python tests/test_real_api.py
 ```
 
-成功时应显示 `1 passed`；未设置 `RUN_REAL_LLM_TEST` 时显示 `1 skipped`。
+包含“接口返回内容”和“真实模型选择 calculator 并回答 600”两项测试，成功时显示 `2 passed`；未开启时显示 `2 skipped`。故障排查时可用 `python -m pytest tests/test_real_api.py --tb=line` 输出简短错误，避免打印第三方库请求栈。
+
+本次改造验证：44 项离线测试通过，另有 2 项真实 DeepSeek API 测试通过。真实工具闭环使用临时 Session，不修改现有聊天数据。
 
 ## 网页 API
 
